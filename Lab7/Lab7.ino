@@ -12,7 +12,7 @@
 #define SAMPLES_PER_READING 15    // The amount of samples per Usonic reading
 
 // Stats for the Servo Motor
-#define TRIGPIN 32                // Pin 5.1 on the board
+#define SERVO_PIN 38              
 Servo servoMotor;
 
 // Bumpers pins
@@ -241,6 +241,9 @@ void DriveStraight(float distanceCM) {
       if (IsBumpersPressed()) {
 
         // We collided, break out of the loop.
+        Serial.println("Bumper has been pressed");
+        disableMotor(LEFT_MOTOR);
+        disableMotor(RIGHT_MOTOR);
         break;
 
       }
@@ -413,16 +416,16 @@ void setup() {
   pinMode(TRIGPIN, OUTPUT);
   pinMode(ECHOPIN, INPUT);
 
+  // Setup the pins for the bumper.
+  pinMode(BUMPER_5, INPUT_PULLUP);
+  pinMode(BUMPER_4, INPUT_PULLUP);
+  pinMode(BUMPER_3, INPUT_PULLUP);
+  pinMode(BUMPER_2, INPUT_PULLUP);
+  pinMode(BUMPER_1, INPUT_PULLUP);
+  pinMode(BUMPER_0, INPUT_PULLUP);
+
   // Setup the pins for the servo motor.
   servoMotor.attach(SERVO_PIN);
-
-  // Setup the pins for the bumper.
-  pinMode(BUMPER_5, INPUT);
-  pinMode(BUMPER_4, INPUT);
-  pinMode(BUMPER_3, INPUT);
-  pinMode(BUMPER_2, INPUT);
-  pinMode(BUMPER_1, INPUT);
-  pinMode(BUMPER_0, INPUT);
 
   Serial.begin(9600);
 
