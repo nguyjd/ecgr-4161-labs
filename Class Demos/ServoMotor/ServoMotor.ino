@@ -21,7 +21,7 @@ void loop() {
 
   delay(2000);
 
-  for (int angle = 0; angle < TOTAL_DEGREES; angle += ROTATE_DEGREES) {
+  for (float angle = 0; angle < TOTAL_DEGREES; angle += ROTATE_DEGREES) {
 
     servoMotor.write(angle);
     delay((1000 * SECONDS) / TOTAL_DEGREES);
