@@ -2,8 +2,8 @@
 // LAB 7
 // Jonathon Nguyen, 03-21-2022
 //**************************************************************
-#include "SimpleRSLK.h"
 #include <Servo.h>
+#include "SimpleRSLK.h"
 
 // The parameters that the lab 7 is on.
 #define SCAN_DEGREES 180.0        // FOV of the robot to find the wall
@@ -14,14 +14,6 @@
 // Stats for the Servo Motor
 #define SERVO_PIN 38              
 Servo servoMotor;
-
-// Bumpers pins
-#define BUMPER_5 28
-#define BUMPER_4 8
-#define BUMPER_3 27
-#define BUMPER_2 6
-#define BUMPER_1 25
-#define BUMPER_0 24
 
 // Stats for the Usonic
 #define TRIGPIN 32                // Pin 5.1 on the board
@@ -34,6 +26,7 @@ Servo servoMotor;
 #define WHEEL_DIAMETER_CM 7.0
 #define ROBOT_BASE_CM 14.0
 #define PULSE_REVOLUTION 360.0
+#define BUMPERNUM 6
 #define DRIVESPEED 13
 #define PIVOTSPEED 7
 
@@ -47,52 +40,14 @@ Servo servoMotor;
  */
 bool IsBumpersPressed() {
 
-  // Check bumper 5
-  if (digitalRead(BUMPER_5) == LOW) {
+  for (int bumperNumber = 0; bumperNumber < BUMPERNUM; bumperNumber++) {
 
-    // Bumper 5 is pressed.
-    return true;
+    if (isBumpSwitchPressed(bumperNumber)) {
 
-  }
-
-  // Check bumper 4
-  if (digitalRead(BUMPER_4) == LOW) {
-
-    // Bumper 4 is pressed.
-    return true;
-
-  }
-
-  // Check bumper 3
-  if (digitalRead(BUMPER_3) == LOW) {
-
-    // Bumper 3 is pressed.
-    return true;
-
-  }
-
-  // Check bumper 2
-  if (digitalRead(BUMPER_2) == LOW) {
-
-    // Bumper 2 is pressed.
-    return true;
-
-  }
-
-  // Check bumper 1
-  if (digitalRead(BUMPER_1) == LOW) {
-
-    // Bumper 1 is pressed.
-    return true;
-
-  }
-
-  // Check bumper 0
-  if (digitalRead(BUMPER_0) == LOW) {
-
-    // Bumper 0 is pressed.
-    return true;
-
+      return true;
+      
+    }
+    
   }
 
   // Return false due to none of the bumpers are pressed.
@@ -241,7 +196,6 @@ void DriveStraight(float distanceCM) {
       if (IsBumpersPressed()) {
 
         // We collided, break out of the loop.
-        Serial.println("Bumper has been pressed");
         disableMotor(LEFT_MOTOR);
         disableMotor(RIGHT_MOTOR);
         break;
@@ -324,20 +278,16 @@ float ReadUltrasonic() {
 
 /*
  * FindClosestDistance
+ * Return float: The closest distance of the object
  * 
  * This function will rotate the robot and scan with the Usonic
  * Once the shortest distance is found. The robot will rotate to point to the closest object.
  */
-void FindClosestDistance() {
+float FindClosestDistance() {
 
   // Store the distance and degrees found.
   float shortestDistance = 9999.0;
   float shortestDegrees = 9999.0;
-
-  servoMotor.write(SCAN_DEGREES);
-  delay(100);
-  servoMotor.write(0);
-  delay(100);
 
   // Scan the envirorment to find the shortest distance.
   float distance = 0.0;
@@ -345,17 +295,12 @@ void FindClosestDistance() {
 
     // Read the sensor and rotate the robot.
     distance = ReadUltrasonic();
-    servoMotor.write(0);
+    servoMotor.write(angle);
 
     if (distance < shortestDistance) {
 
       shortestDistance = distance;
       shortestDegrees = angle;
-
-      Serial.print("New shortest distance found. Distance: ");
-      Serial.print(shortestDistance);
-      Serial.print(" @ Degrees: ");
-      Serial.println(shortestDegrees);
 
     }
     
@@ -370,45 +315,41 @@ void FindClosestDistance() {
 
       // Read the sensor and rotate the robot.
       distance = ReadUltrasonic();
-      servoMotor.write(0);
+      servoMotor.write(angle);
 
       if (distance < shortestDistance) {
 
-      shortestDistance = distance;
-      shortestDegrees = angle + ROTATE_DEGREES;
+        shortestDistance = distance;
+        shortestDegrees = angle + ROTATE_DEGREES;
 
-      Serial.print("New shortest distance found. Distance: ");
-      Serial.print(shortestDistance);
-      Serial.print(" @ Degrees: ");
-      Serial.println(shortestDegrees);
-
-    }
+      }
 
   }
 
-  Serial.println("");
-  Serial.print("Rotating back: ");
-
   // Check the degrees to see how to rotate.
-  if (shortestDistance > 180) {
+  if (shortestDegrees > 180) {
 
     // Rotate the robot CCW
-    RotateInPlace(shortestDistance - ROTATE_DEGREES, true);
-    Serial.println(shortestDistance - ROTATE_DEGREES);
+    RotateInPlace(shortestDegrees - ROTATE_DEGREES, true);
 
   } else {
 
     // Rotate the robot CW
-    RotateInPlace(ROTATE_DEGREES - shortestDistance, false);
-    Serial.println(ROTATE_DEGREES - shortestDistance);
+    RotateInPlace(ROTATE_DEGREES - shortestDegrees, false);
 
   }
 
   delay(1000);
 
+  return shortestDistance;
+
 }
 
 void setup() {
+
+  // Setup the pins for the servo motor.
+  servoMotor.attach(SERVO_PIN);
+  
   // put your setup code here, to run once:
   setupRSLK();
 
@@ -416,27 +357,12 @@ void setup() {
   pinMode(TRIGPIN, OUTPUT);
   pinMode(ECHOPIN, INPUT);
 
-  // Setup the pins for the bumper.
-  pinMode(BUMPER_5, INPUT_PULLUP);
-  pinMode(BUMPER_4, INPUT_PULLUP);
-  pinMode(BUMPER_3, INPUT_PULLUP);
-  pinMode(BUMPER_2, INPUT_PULLUP);
-  pinMode(BUMPER_1, INPUT_PULLUP);
-  pinMode(BUMPER_0, INPUT_PULLUP);
-
-  // Setup the pins for the servo motor.
-  servoMotor.attach(SERVO_PIN);
-
-  Serial.begin(9600);
-
   // Delay for 2 seconds so I can let go of the robot.
   delay(2000);
   
   // Run the algorithm of lab.
-  //FindClosestDistance();
-  //DriveToWall();
-  //RotateInPlace(ROTATE_DEGREES, false);
-  DriveStraight(999);
+  float distance = FindClosestDistance();
+  DriveStraight(distance);
 
 }
 
