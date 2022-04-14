@@ -1,7 +1,8 @@
-//**************************************************************
-// LAB 7
-// Jonathon Nguyen, 03-21-2022
-//**************************************************************
+//******************************************************************
+// LAB 7 - Use the ultrasonic sensor with the servo motor to
+// scan 360 degrees to find the shortest distance and drive to it.
+// Jonathon Nguyen, 04-4-2022
+//******************************************************************
 #include <Servo.h>
 #include "SimpleRSLK.h"
 
@@ -18,8 +19,8 @@ Servo servoMotor;
 // Stats for the Usonic
 #define TRIGPIN 32                // Pin 5.1 on the board
 #define ECHOPIN 33                // Pin 3.5 on the board
-#define SENSOR_TIMEOUT 12000      // 12000 microseconds before the timeout.
-#define MAX_DIST 200.0            // The max distance of the Usonic sensor.
+#define SENSOR_TIMEOUT 20000      // 20000 microseconds before the timeout.
+#define MAX_DIST 400.0            // The max distance of the Usonic sensor.
 #define SENSOR_OFFSET 1.0         // The distance from the front of the robot in cm
 
 // Robot Dimensions/Stats
@@ -302,6 +303,11 @@ float FindClosestDistance() {
       shortestDistance = distance;
       shortestDegrees = angle;
 
+      Serial.print("New shortest distance found. Distance: ");
+      Serial.print(shortestDistance);
+      Serial.print(" @ Degrees: ");
+      Serial.println(shortestDegrees);
+
     }
     
   }
@@ -322,21 +328,61 @@ float FindClosestDistance() {
         shortestDistance = distance;
         shortestDegrees = angle + ROTATE_DEGREES;
 
+        Serial.print("New shortest distance found. Distance: ");
+        Serial.print(shortestDistance);
+        Serial.print(" @ Degrees: ");
+        Serial.println(shortestDegrees);
+
       }
 
   }
 
+
   // Check the degrees to see how to rotate.
-  if (shortestDegrees > 180) {
+  // These if statement split the problem into quadrant
+  if (90 > shortestDegrees)
+  {
 
-    // Rotate the robot CCW
-    RotateInPlace(shortestDegrees - ROTATE_DEGREES, true);
+    // In the first quadrant. Rotate 180 and then the offset.
+    RotateInPlace(ROTATE_DEGREES + (90 - shortestDegrees), false);
 
-  } else {
+    Serial.print("Rotating: ");
+    Serial.print(ROTATE_DEGREES + (90 - shortestDegrees));
+    Serial.println(" Degrees. CW");
+      
+  }
+  else if (180 > shortestDegrees)
+  {
 
-    // Rotate the robot CW
-    RotateInPlace(ROTATE_DEGREES - shortestDegrees, false);
+    // In the second quadrant. Rotate 90 degrees and then the offset from 180.
+    RotateInPlace(90 + (180 - shortestDegrees), false);
 
+    Serial.print("Rotating: ");
+    Serial.print(90 + (180 - shortestDegrees));
+    Serial.println(" Degrees CW");
+      
+  }
+  else if (270 > shortestDegrees)
+  {
+
+    // In the third quadrant. rotate just the offset CW
+    RotateInPlace(270 - shortestDegrees, false);
+
+    Serial.print("Rotating: ");
+    Serial.print(270 - shortestDegrees);
+    Serial.println(" Degrees. CW");
+      
+  }
+  else
+  {
+
+    // In the fourth quadrant. rotate just the offset CCW from 270
+    RotateInPlace(shortestDegrees - 270, true);
+
+    Serial.print("Rotating: ");
+    Serial.print(shortestDegrees - 270);
+    Serial.println(" Degrees. CCW");
+      
   }
 
   delay(1000);
@@ -352,6 +398,8 @@ void setup() {
   
   // put your setup code here, to run once:
   setupRSLK();
+
+  Serial.begin(9600);
 
   // Setup the pins for the USonic
   pinMode(TRIGPIN, OUTPUT);
