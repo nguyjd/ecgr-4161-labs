@@ -8,7 +8,7 @@
 // The parameters that the lab 8 is on.
 #define DRIVE_STRAIGHT_CM 100     // How far to drive.
 #define DISTANCE_PER_SCAN_CM 20   // How far to drive before scanning.
-#define BOX_THRESHOLD 90.0       // The distance sensor see when its a box.
+#define BOX_THRESHOLD 65.0       // The distance sensor see when its a box.
 #define SAMPLES_PER_READING 15    // The amount of samples per Usonic reading
 
 // Stats for the Servo Motor
@@ -31,8 +31,8 @@ Servo servoMotor;
 
 // Arrays hold if a object is left or right
 // first index, 0 - right, 1 - left
-float distanceScans[2][DRIVE_STRAIGHT_CM/DISTANCE_PER_SCAN_CM];
-bool scans[2][DRIVE_STRAIGHT_CM/DISTANCE_PER_SCAN_CM];
+float distanceScans[2][DRIVE_STRAIGHT_CM/DISTANCE_PER_SCAN_CM + 1];
+bool scans[2][DRIVE_STRAIGHT_CM/DISTANCE_PER_SCAN_CM + 1];
 
 /*
  * RotateInPlace
@@ -309,7 +309,14 @@ void FindBoxesLeftandRight() {
       delay(rotationDelay);
       
     }
-    DriveStraight(DISTANCE_PER_SCAN_CM);
+
+    // Stop moving straight when at max distance.
+    if (scan != amountScan) {
+
+      DriveStraight(DISTANCE_PER_SCAN_CM);
+      
+    }
+    
   }
 
   Serial.println("Scanning Results: Distance");
@@ -358,16 +365,12 @@ void StopAndLookAtBoxes() {
   // Turn around.
   RotateInPlace(180.0, true);
 
-  for (int scan = amountScan - 1; scan >= 0; scan--) {
+  for (int scan = amountScan; scan >= 0; scan--) {
 
     // I uses vars here just in case
     // that boxes are the same distance on both side.
     float leftDistance = 0;
     float rightDistance = 0;
-
-    // point the servo straight.
-    servoMotor.write(straightDegrees);
-    delay(rotationDelay);
 
     // Right side has a box.
     if (scans[1][scan] == true) {
@@ -399,10 +402,10 @@ void StopAndLookAtBoxes() {
       
       float middleIndex = (float)lookAheadCounter/2.0;
 
-      float distanceFromStart = scan*DISTANCE_PER_SCAN_CM;
+      float distanceFromStart = DRIVE_STRAIGHT_CM - scan*DISTANCE_PER_SCAN_CM;
       float distanceFromFirstIndex = middleIndex*DISTANCE_PER_SCAN_CM;
 
-      rightDistance = (distanceFromStart - distanceFromFirstIndex) - distanceTraveled;
+      rightDistance = (distanceFromStart + distanceFromFirstIndex) - distanceTraveled;
       
     }
 
@@ -436,12 +439,20 @@ void StopAndLookAtBoxes() {
 
       float middleIndex = (float)lookAheadCounter/2.0;
 
-      float distanceFromStart = scan*DISTANCE_PER_SCAN_CM;
+      float distanceFromStart = DRIVE_STRAIGHT_CM - scan*DISTANCE_PER_SCAN_CM;
       float distanceFromFirstIndex = middleIndex*DISTANCE_PER_SCAN_CM;
 
-      leftDistance = (distanceFromStart - distanceFromFirstIndex) - distanceTraveled;
+      rightDistance = (distanceFromStart + distanceFromFirstIndex) - distanceTraveled;
       
     }
+
+    Serial.print("Scan ");
+    Serial.println(scan);
+    Serial.print("Left distance: ");
+    Serial.print(leftDistance);
+    Serial.print(" , Right distance: ");
+    Serial.println(rightDistance);
+    Serial.println("");
 
     // Both are greater than zero, we need to move twice probably.
     if (leftDistance > 0 && rightDistance > 0) {
@@ -461,6 +472,7 @@ void StopAndLookAtBoxes() {
         }
 
         delay(3000);
+        
         // point right
         for (int angle = leftDegrees; angle >= rightDegrees; angle--) {
 
@@ -470,6 +482,14 @@ void StopAndLookAtBoxes() {
         }
 
         delay(3000);
+
+        // point straight
+        for (int angle = rightDegrees; angle <= straightDegrees; angle++) {
+
+          servoMotor.write(angle);
+          delay(rotationDelay);
+      
+        }
         
       } 
 
@@ -503,6 +523,14 @@ void StopAndLookAtBoxes() {
           }
 
           delay(3000);
+
+          // Point straight
+          for (int angle = rightDegrees; angle <= straightDegrees; angle++) {
+
+            servoMotor.write(angle);
+            delay(rotationDelay);
+      
+          }
           
         } else {
 
@@ -530,6 +558,14 @@ void StopAndLookAtBoxes() {
           }
 
           delay(3000);
+
+          // Point straight
+          for (int angle = leftDegrees; angle >= straightDegrees; angle--) {
+
+            servoMotor.write(angle);
+            delay(rotationDelay);
+      
+          }
           
         }
         
@@ -538,7 +574,7 @@ void StopAndLookAtBoxes() {
     } 
 
     // One is zero and only need to travel to one box.
-    else {
+    else if(leftDistance > 0 || rightDistance > 0){
 
       // Go to the box on the right.
       if (rightDistance > 0) {
@@ -555,6 +591,14 @@ void StopAndLookAtBoxes() {
         }
 
         delay(3000);
+
+        // Point straight
+        for (int angle = rightDegrees; angle <= straightDegrees; angle++) {
+
+          servoMotor.write(angle);
+          delay(rotationDelay);
+      
+        }
         
         
       }
@@ -573,6 +617,14 @@ void StopAndLookAtBoxes() {
       
         }
         delay(3000);
+
+        // Point straight
+        for (int angle = leftDegrees; angle >= straightDegrees; angle--) {
+
+          servoMotor.write(angle);
+          delay(rotationDelay);
+      
+        }
         
       }
       
