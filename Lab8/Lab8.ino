@@ -6,9 +6,9 @@
 #include "SimpleRSLK.h"
 
 // The parameters that the lab 8 is on.
-#define DRIVE_STRAIGHT_CM 100     // How far to drive.
+#define DRIVE_STRAIGHT_CM 300     // How far to drive.
 #define DISTANCE_PER_SCAN_CM 20   // How far to drive before scanning.
-#define BOX_THRESHOLD 65.0       // The distance sensor see when its a box.
+#define BOX_THRESHOLD 100.0       // The distance sensor see when its a box.
 #define SAMPLES_PER_READING 15    // The amount of samples per Usonic reading
 
 // Stats for the Servo Motor
@@ -18,9 +18,9 @@ Servo servoMotor;
 // Stats for the Usonic
 #define TRIGPIN 32                // Pin 5.1 on the board
 #define ECHOPIN 33                // Pin 3.5 on the board
-#define SENSOR_TIMEOUT 20000      // 20000 microseconds before the timeout.
+#define SENSOR_TIMEOUT 30000      // 20000 microseconds before the timeout.
 #define MAX_DIST 400.0            // The max distance of the Usonic sensor.
-#define SENSOR_OFFSET 1.0         // The distance from the front of the robot in cm
+#define SENSOR_OFFSET 1.0         // The distance from the center of the robot in cm
 
 // Robot Dimensions/Stats
 #define WHEEL_DIAMETER_CM 7.0
@@ -234,8 +234,8 @@ float ReadUltrasonic() {
         inversion = true;
 
       } 
-		} 
-	}
+    } 
+  }
 
   // Return the median of the samples.
   return samples[SAMPLES_PER_READING / 2];
@@ -319,6 +319,11 @@ void FindBoxesLeftandRight() {
     
   }
 
+  // Drive for the sensor offset.
+  // This is need because when we pivot,
+  // the sensor distance from the start become shorter.
+  DriveStraight(SENSOR_OFFSET);
+
   Serial.println("Scanning Results: Distance");
   for (int scan = 0; scan <= amountScan; scan++) {
 
@@ -331,6 +336,7 @@ void FindBoxesLeftandRight() {
     Serial.println(" cm");
     
   }
+  Serial.println("");
 
   Serial.println("Scanning Results: 1 for Box, 0 for no Box");
   for (int scan = 0; scan <= amountScan; scan++) {
@@ -343,6 +349,8 @@ void FindBoxesLeftandRight() {
     Serial.println(scans[0][scan]);
     
   }
+
+  Serial.println("");
   
 }
 
@@ -365,6 +373,9 @@ void StopAndLookAtBoxes() {
   // Turn around.
   RotateInPlace(180.0, true);
 
+  
+  int parsedIndexLeft = 0;
+  int parsedIndexRight = 0;
   for (int scan = amountScan; scan >= 0; scan--) {
 
     // I uses vars here just in case
@@ -373,10 +384,12 @@ void StopAndLookAtBoxes() {
     float rightDistance = 0;
 
     // Right side has a box.
-    if (scans[1][scan] == true) {
+    if (parsedIndexRight == 0) {
+
+      if (scans[1][scan] == true) {
 
       // look ahead and find mid.
-      int lookAheadCounter = 1;
+      int lookAheadCounter = 0;
       while (true) {
 
         lookAheadCounter++;
@@ -388,6 +401,7 @@ void StopAndLookAtBoxes() {
 
             // Backtrack one and break the loop.
             lookAheadCounter--;
+            parsedIndexRight = lookAheadCounter;
             break;
             
           }
@@ -399,50 +413,67 @@ void StopAndLookAtBoxes() {
         }
         
       }
+
       
-      float middleIndex = (float)lookAheadCounter/2.0;
+      float indexDifference = (float)scan - (float)lookAheadCounter;
+      float middleIndex = ((float)scan + indexDifference)/2.0;
 
-      float distanceFromStart = DRIVE_STRAIGHT_CM - scan*DISTANCE_PER_SCAN_CM;
-      float distanceFromFirstIndex = middleIndex*DISTANCE_PER_SCAN_CM;
+      float distanceFromStart = DRIVE_STRAIGHT_CM - middleIndex*DISTANCE_PER_SCAN_CM;
 
-      rightDistance = (distanceFromStart + distanceFromFirstIndex) - distanceTraveled;
+      rightDistance = distanceFromStart - distanceTraveled;
+      
+      }
+      
+    } else {
+
+      parsedIndexRight--;
       
     }
+    
 
     // Left side has a box.
-    if (scans[0][scan] == true) {
+    if (parsedIndexLeft == 0) {
 
-      // look ahead and find mid.
-      int lookAheadCounter = 1;
-      while (true) {
+      if (scans[0][scan] == true) {
 
-        lookAheadCounter++;
-          
-        // Check to make sure the index is not out of bounds.
-        if (scan - lookAheadCounter >= 0) {
+        // look ahead and find mid.
+        int lookAheadCounter = 0;
+        while (true) {
   
-          if (scans[1][scan - lookAheadCounter] == false) {
-  
-            // Backtrack one and break the loop.
-            lookAheadCounter--;
+          lookAheadCounter++;
+            
+          // Check to make sure the index is not out of bounds.
+          if (scan - lookAheadCounter >= 0) {
+    
+            if (scans[0][scan - lookAheadCounter] == false) {
+    
+              // Backtrack one and break the loop.
+              lookAheadCounter--;
+              parsedIndexLeft = lookAheadCounter;
+              break;
+                
+            }
+              
+          } else {
+    
             break;
               
           }
-            
-        } else {
-  
-          break;
-            
+          
         }
-        
+  
+        float indexDifference = (float)scan - (float)lookAheadCounter;
+        float middleIndex = ((float)scan + indexDifference)/2.0;
+  
+       float distanceFromStart = DRIVE_STRAIGHT_CM - middleIndex*DISTANCE_PER_SCAN_CM;
+  
+        leftDistance = distanceFromStart - distanceTraveled;
+      
       }
+      
+    } else {
 
-      float middleIndex = (float)lookAheadCounter/2.0;
-
-      float distanceFromStart = DRIVE_STRAIGHT_CM - scan*DISTANCE_PER_SCAN_CM;
-      float distanceFromFirstIndex = middleIndex*DISTANCE_PER_SCAN_CM;
-
-      rightDistance = (distanceFromStart + distanceFromFirstIndex) - distanceTraveled;
+      parsedIndexLeft--;
       
     }
 
@@ -638,6 +669,9 @@ void StopAndLookAtBoxes() {
     DriveStraight(DRIVE_STRAIGHT_CM - distanceTraveled);
       
   }
+
+  // Fix the offset from the mapping function.
+  DriveStraight(SENSOR_OFFSET);
   
 }
 
