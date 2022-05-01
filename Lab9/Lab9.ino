@@ -1,33 +1,38 @@
 //******************************************************************
-// LAB 8 - Drive down a hallway and find boxes on the right and left.
-// Jonathon Nguyen, 04-18-2022
+// LAB 9
+// Jonathon Nguyen, 05-02-2022
 //******************************************************************
 #include <Servo.h>
 #include "SimpleRSLK.h"
 
-// The parameters that the lab 8 is on.
-#define DRIVE_STRAIGHT_CM 300     // How far to drive.
-#define DISTANCE_PER_SCAN_CM 20   // How far to drive before scanning.
-#define BOX_THRESHOLD 100.0       // The distance sensor see when its a box.
-#define SAMPLES_PER_READING 15    // The amount of samples per Usonic reading
+// The parameters that the lab 9 is on.
+#define SAMPLES_PER_READING 5     // The amount of samples per Usonic reading
+#define SAMPLE_LINE 100           // The amount of sample for line sensor
+#define DEGREES_PER_SCAN 1.0      // How much to rotate per scan
+#define SCAN_DEGREES 180.0        // FOV of the robot to find the wall
+#define ROTATE_DEGREES 90.0       // How much to turn CW
 
 // Stats for the Servo Motor
-#define SERVO_PIN 38              
+#define SERVO_PIN 35              // Pin 6.7 on the board           
 Servo servoMotor;
 
 // Stats for the Usonic
 #define TRIGPIN 32                // Pin 5.1 on the board
 #define ECHOPIN 33                // Pin 3.5 on the board
-#define SENSOR_TIMEOUT 30000      // 20000 microseconds before the timeout.
+#define SENSOR_TIMEOUT 30000      // 30000 microseconds before the timeout.
 #define MAX_DIST 400.0            // The max distance of the Usonic sensor.
-#define SENSOR_OFFSET 1.0         // The distance from the center of the robot in cm
 
 // Robot Dimensions/Stats
 #define WHEEL_DIAMETER_CM 7.0
 #define ROBOT_BASE_CM 14.0
 #define PULSE_REVOLUTION 360.0
-#define DRIVESPEED 13
-#define PIVOTSPEED 7
+#define DRIVESPEED 10
+#define PIVOTSPEED 10
+
+uint16_t lineSensor[LS_NUM_SENSORS];
+uint16_t lineSensorCal[LS_NUM_SENSORS];
+uint16_t lineSensorMax[LS_NUM_SENSORS];
+uint16_t lineSensorMin[LS_NUM_SENSORS];
 
 /*
  * RotateInPlace
@@ -115,11 +120,13 @@ void RotateInPlace(float amountDegrees, bool CCW) {
 void DriveStraight(float distanceCM) {
   
   // the difference that the right and left encoder count can be apart.
-  const uint16_t swayTolerance = 2;
+  const uint16_t swayTolerance = 1;
+
+  // The lowest that the speed can be.
+  const uint16_t speedLowerLimit = 5;
   
   // calculate the amount of encoder pulse require to move staright by distanceCM
   uint16_t encoderAmount = (distanceCM/(WHEEL_DIAMETER_CM * PI))*PULSE_REVOLUTION;
-  
 
   // Set the speed of the motors and set the encodercount vars to zero.
   uint16_t rightMotorSpeed = DRIVESPEED;
@@ -144,23 +151,26 @@ void DriveStraight(float distanceCM) {
       // if right motor is too fast, speed up the left motor 
       if((leftEncoderCount + swayTolerance) < rightEncoderCount) {
 
-        setMotorSpeed(LEFT_MOTOR, leftMotorSpeed++);
+        if (rightMotorSpeed - 1 < speedLowerLimit) {rightMotorSpeed--;}
+        leftMotorSpeed++;
+        
         
       }
       else if ((rightEncoderCount + swayTolerance) < leftEncoderCount) {
 
-        setMotorSpeed(RIGHT_MOTOR, rightMotorSpeed++);
+        if (leftMotorSpeed - 1 < speedLowerLimit) {leftMotorSpeed--;}
+        rightMotorSpeed++;
         
       }
       else {
 
         rightMotorSpeed = DRIVESPEED;
         leftMotorSpeed = DRIVESPEED;
-
-        setMotorSpeed(LEFT_MOTOR, leftMotorSpeed);
-        setMotorSpeed(RIGHT_MOTOR, rightMotorSpeed);
         
       }
+
+      setMotorSpeed(LEFT_MOTOR, leftMotorSpeed);
+      setMotorSpeed(RIGHT_MOTOR, rightMotorSpeed);
       
       // Stop motors when they reach the distance.
       if (leftEncoderCount >= encoderAmount) disableMotor(LEFT_MOTOR);
@@ -237,427 +247,250 @@ float ReadUltrasonic() {
   
 }
 
-/*
- * FindBoxesLeftandRight
- * 
- * This function find location of boxes.
- * The reading from the Usonic will be filtered using a threshold
- * This is part 1 of the lab.
- */
-void FindBoxesLeftandRight() {
+void LocateCenterOfRoom() {
 
-  int amountScan = DRIVE_STRAIGHT_CM/DISTANCE_PER_SCAN_CM;
+  /* --Scan for the closest wall-- */
+  // Store the distance and degrees found.
+  float shortestDistance = 9999.0;
+  float shortestDegrees = 9999.0;
+
+  // Scan the envirorment to find the shortest distance.
+  float distance = 0.0;
+  
+  for (float robotAngle = 0.0; robotAngle < 360.0; robotAngle += ROTATE_DEGREES) {
+
+    distance = 0.0;
+    for (float angle = 0; angle < SCAN_DEGREES; angle += DEGREES_PER_SCAN) {
+
+    // Read the sensor and rotate the robot.
+    distance = ReadUltrasonic();
+    servoMotor.write(angle);
+
+      if (distance < shortestDistance) {
+  
+        shortestDistance = distance;
+        shortestDegrees = angle + robotAngle;
+  
+      }
+      
+    }
+
+    servoMotor.write(0);
+    delay(1000);
+    RotateInPlace(ROTATE_DEGREES, true);
+    
+  }
+
+  /*-- Point to the wall -- */
+  // Check the degrees to see how to rotate.
+  if (90 > shortestDegrees) {
+
+    // In the first quadrant. Rotate the offset.
+    RotateInPlace(90.0 - shortestDegrees, false);
+      
+  }
+  else {
+
+    RotateInPlace(shortestDegrees - 90.0, true);
+      
+  }
+
+  servoMotor.write(90);
+  delay(1000);
+
+  /* --Find the midpoint-- */
+  float x1 = ReadUltrasonic();
+  RotateInPlace(180.0, true);
+  float x2 = ReadUltrasonic();
+  float midpoint = (x1 + x2) / 2;
+
+  /* --Drive to the midpoint -- */
+  delay(500);
+  DriveStraight(x2 - midpoint);
+
+  /* --Find the midpoint-- */
+  // Turn 90 and scan
+  delay(500);
+  RotateInPlace(90.0, true);
+  x1 = ReadUltrasonic();
+
+  // Turn 180 and scan
+  delay(500);
+  RotateInPlace(180.0, true);
+  x2 = ReadUltrasonic();
+  midpoint = (x1 + x2) / 2;
+
+  /* --Drive to the midpoint -- */
+  if (x1 > x2) {
+
+    RotateInPlace(180.0, true);
+    delay(500);
+    DriveStraight(x1 - midpoint);
+    
+  } 
+  else {
+
+    delay(500);
+    DriveStraight(x2 - midpoint);
+     
+  }
+  
+}
+
+void CalibrateLineSensors() {
+
+  // Drive a little bit to calibrate the sensors.
+  setMotorDirection(BOTH_MOTORS, MOTOR_DIR_FORWARD);
+  enableMotor(BOTH_MOTORS);
+  setMotorSpeed(BOTH_MOTORS, DRIVESPEED);
+
+  // Sample the sensors
+  for(int i = 0; i < SAMPLE_LINE; i++)
+  {
+    readLineSensor(lineSensor);
+    setSensorMinMax(lineSensor, lineSensorMax, lineSensorMin);
+  }
+
+  // Turn off the motors.
+  disableMotor(BOTH_MOTORS);
+}
+
+void FollowLine() {
+
+  uint16_t normalSpeed = 15;
+  uint16_t slowSpeed = 10;
+  uint8_t lineColor = DARK_LINE;
+  bool foundT = false;
+
+  setMotorDirection(BOTH_MOTORS, MOTOR_DIR_FORWARD);
+  enableMotor(BOTH_MOTORS);
+  setMotorSpeed(BOTH_MOTORS, normalSpeed);
+  
+  while (!foundT) {
+    
+    readLineSensor(lineSensor);
+    readCalLineSensor(lineSensor,lineSensorCal,lineSensorMin,lineSensorMax,lineColor);
+    uint32_t linePos = getLinePosition(lineSensorCal,lineColor);
+
+    // Check the position of the line.
+    // Pivot the robot to make the line in the middle.
+    if(linePos > 0 && linePos < 3000) {
+      
+      setMotorSpeed(BOTH_MOTORS, slowSpeed);
+      setMotorDirection(LEFT_MOTOR, MOTOR_DIR_BACKWARD);
+      setMotorDirection(RIGHT_MOTOR, MOTOR_DIR_FORWARD);
+      
+    } 
+    else if(linePos > 3500) 
+    {
+      setMotorSpeed(BOTH_MOTORS, slowSpeed);
+      setMotorDirection(LEFT_MOTOR, MOTOR_DIR_FORWARD);
+      setMotorDirection(RIGHT_MOTOR, MOTOR_DIR_BACKWARD);
+    } 
+    else 
+    {
+      setMotorDirection(LEFT_MOTOR, MOTOR_DIR_FORWARD);
+      setMotorDirection(RIGHT_MOTOR, MOTOR_DIR_FORWARD);
+    }
+  
+    foundT = true;
+    // Check if all the sensor are filled.
+    for (int i = 0; i < LS_NUM_SENSORS; i++)
+    {
+      
+      if (lineSensorCal[i] < 800)
+      {
+  
+        foundT = false;
+        break;
+        
+      }
+      
+    }
+    
+  }
+
+  disableMotor(BOTH_MOTORS);
+  delay(2000);
+  
+}
+
+void RotateToLine() {
+
+  uint8_t lineColor = DARK_LINE;
+  while (true) {
+
+    readLineSensor(lineSensor);
+    readCalLineSensor(lineSensor,lineSensorCal,lineSensorMin,lineSensorMax,lineColor);
+    uint32_t linePos = getLinePosition(lineSensorCal, lineColor);
+    
+    if (lineSensorCal[3] == 1000 || lineSensorCal[4] == 1000) { break; }
+    RotateInPlace(1.0, true);
+    
+  }
+  
+}
+
+void MazeRunner() {
+
+  const float turnLeftThresh = 60.0;
+  const float turnRightThresh = 10.0;
+
   int rightDegrees = 0;
   int leftDegrees = 180;
   int straightDegrees = 90;
   int rotationDelay = 5;
+  float distance = 0.0;
 
-  // Scanning and mapping.
-  for (int scan = 0; scan <= amountScan; scan++) {
+  while (true) {
 
-    // Move the servo and scan the right side.
-    // The servo would not move with straight input, this is my solution.
-    for (int angle = straightDegrees; angle >= rightDegrees; angle--) {
-
-      servoMotor.write(angle);
-      delay(rotationDelay);
-      
-    }
-    float rightScan = ReadUltrasonic();
-    distanceScans[0][scan] = rightScan;
-
-    // Logic to determine if box is there.
-    if (rightScan < BOX_THRESHOLD) {
-
-      scans[0][scan] = true;
-      
-    } else {
-
-      scans[0][scan] = false;
-      
-    }
-
-    // Move the servo and scan the left side.
-    for (int angle = rightDegrees; angle <= leftDegrees; angle++) {
-
-      servoMotor.write(angle);
-      delay(rotationDelay);
-      
-    }
-    float leftScan = ReadUltrasonic();
-    distanceScans[1][scan] = leftScan;
-
-    // Logic to determine if box is there.
-    if (leftScan < BOX_THRESHOLD) {
-
-      scans[1][scan] = true;
-      
-    } else {
-
-      scans[1][scan] = false;
-      
-    }
-
+    // Look straight for short distance
     for (int angle = leftDegrees; angle >= straightDegrees; angle--) {
 
       servoMotor.write(angle);
       delay(rotationDelay);
       
     }
+    float straightdistance = ReadUltrasonic() - turnRightThresh;
 
-    // Stop moving straight when at max distance.
-    if (scan != amountScan) {
+    // look left for long distance
+    for (int angle = straightDegrees; angle <= leftDegrees; angle++) {
 
-      DriveStraight(DISTANCE_PER_SCAN_CM);
-      
-    }
-    
-  }
-
-  // Drive for the sensor offset.
-  // This is need because when we pivot,
-  // the sensor distance from the start become shorter.
-  DriveStraight(SENSOR_OFFSET);
-
-  Serial.println("Scanning Results: Distance");
-  for (int scan = 0; scan <= amountScan; scan++) {
-
-    Serial.print("CM: ");
-    Serial.print(scan*DISTANCE_PER_SCAN_CM);
-    Serial.print(" | Left: ");
-    Serial.print(distanceScans[1][scan]);
-    Serial.print(" cm, Right: ");
-    Serial.print(distanceScans[0][scan]);
-    Serial.println(" cm");
-    
-  }
-  Serial.println("");
-
-  Serial.println("Scanning Results: 1 for Box, 0 for no Box");
-  for (int scan = 0; scan <= amountScan; scan++) {
-
-    Serial.print("Boxes: ");
-    Serial.print(scan*DISTANCE_PER_SCAN_CM);
-    Serial.print(" | Left: ");
-    Serial.print(scans[1][scan]);
-    Serial.print(" , Right: ");
-    Serial.println(scans[0][scan]);
-    
-  }
-
-  Serial.println("");
-  
-}
-
-  int amountScan = DRIVE_STRAIGHT_CM/DISTANCE_PER_SCAN_CM;
-  int rightDegrees = 0;
-  int leftDegrees = 180;
-  int straightDegrees = 90;
-  float distanceTraveled = 0;
-  int rotationDelay = 5;
-
-  // Turn around.
-  RotateInPlace(180.0, true);
-
-  
-  int parsedIndexLeft = 0;
-  int parsedIndexRight = 0;
-  for (int scan = amountScan; scan >= 0; scan--) {
-
-    // I uses vars here just in case
-    // that boxes are the same distance on both side.
-    float leftDistance = 0;
-    float rightDistance = 0;
-
-    // Right side has a box.
-    if (parsedIndexRight == 0) {
-
-      if (scans[1][scan] == true) {
-
-      // look ahead and find mid.
-      int lookAheadCounter = 0;
-      while (true) {
-
-        lookAheadCounter++;
-        
-        // Check to make sure the index is not out of bounds.
-        if (scan - lookAheadCounter >= 0) {
-
-          if (scans[1][scan - lookAheadCounter] == false) {
-
-            // Backtrack one and break the loop.
-            lookAheadCounter--;
-            parsedIndexRight = lookAheadCounter;
-            break;
-            
-          }
-          
-        } else {
-
-          break;
-          
-        }
-        
-      }
-
-      
-      float indexDifference = (float)scan - (float)lookAheadCounter;
-      float middleIndex = ((float)scan + indexDifference)/2.0;
-
-      float distanceFromStart = DRIVE_STRAIGHT_CM - middleIndex*DISTANCE_PER_SCAN_CM;
-
-      rightDistance = distanceFromStart - distanceTraveled;
-      
-      }
-      
-    } else {
-
-      parsedIndexRight--;
-      
-    }
-    
-
-    // Left side has a box.
-    if (parsedIndexLeft == 0) {
-
-      if (scans[0][scan] == true) {
-
-        // look ahead and find mid.
-        int lookAheadCounter = 0;
-        while (true) {
-  
-          lookAheadCounter++;
-            
-          // Check to make sure the index is not out of bounds.
-          if (scan - lookAheadCounter >= 0) {
-    
-            if (scans[0][scan - lookAheadCounter] == false) {
-    
-              // Backtrack one and break the loop.
-              lookAheadCounter--;
-              parsedIndexLeft = lookAheadCounter;
-              break;
-                
-            }
-              
-          } else {
-    
-            break;
-              
-          }
-          
-        }
-  
-        float indexDifference = (float)scan - (float)lookAheadCounter;
-        float middleIndex = ((float)scan + indexDifference)/2.0;
-  
-       float distanceFromStart = DRIVE_STRAIGHT_CM - middleIndex*DISTANCE_PER_SCAN_CM;
-  
-        leftDistance = distanceFromStart - distanceTraveled;
-      
-      }
-      
-    } else {
-
-      parsedIndexLeft--;
+      servoMotor.write(angle);
+      delay(rotationDelay);
       
     }
 
-    Serial.print("Scan ");
-    Serial.println(scan);
-    Serial.print("Left distance: ");
-    Serial.print(leftDistance);
-    Serial.print(" , Right distance: ");
-    Serial.println(rightDistance);
-    Serial.println("");
+    // Drive striaght
+    bool turnLeft = false;
+    for (float distanceTraveled = 0.0; distanceTraveled < straightdistance; 
+         distanceTraveled += 1.0) {
 
-    // Both are greater than zero, we need to move twice probably.
-    if (leftDistance > 0 && rightDistance > 0) {
+      DriveStraight(1.0);
 
-      // The two distance are the same.
-      if (abs(rightDistance - leftDistance) < 0.001) {
+      distance = ReadUltrasonic();
+  
+      // There is a hole to turn left.
+      if (distance > turnLeftThresh)
+      {
 
-        DriveStraight(rightDistance);
-        distanceTraveled += rightDistance;
-        
-        // Point left
-        for (int angle = straightDegrees; angle <= leftDegrees; angle++) {
-
-          servoMotor.write(angle);
-          delay(rotationDelay);
-      
-        }
-
-        delay(3000);
-        
-        // point right
-        for (int angle = leftDegrees; angle >= rightDegrees; angle--) {
-
-          servoMotor.write(angle);
-          delay(rotationDelay);
-      
-        }
-
-        delay(3000);
-
-        // point straight
-        for (int angle = rightDegrees; angle <= straightDegrees; angle++) {
-
-          servoMotor.write(angle);
-          delay(rotationDelay);
-      
-        }
-        
-      } 
-
-      // The two distance are not the same.
-      else {
-
-        // Drive to left box first, then right.
-        if (rightDistance > leftDistance) {
-    
-          DriveStraight(leftDistance);
-
-          // Point left
-          for (int angle = straightDegrees; angle <= leftDegrees; angle++) {
-
-            servoMotor.write(angle);
-            delay(rotationDelay);
-      
-          }
-
-          delay(3000);
-          DriveStraight(rightDistance - leftDistance);
-          distanceTraveled += rightDistance;
-          
-
-          // Point right
-          for (int angle = leftDegrees; angle >= rightDegrees; angle--) {
-
-            servoMotor.write(angle);
-            delay(rotationDelay);
-      
-          }
-
-          delay(3000);
-
-          // Point straight
-          for (int angle = rightDegrees; angle <= straightDegrees; angle++) {
-
-            servoMotor.write(angle);
-            delay(rotationDelay);
-      
-          }
-          
-        } else {
-
-          DriveStraight(rightDistance);
-
-          // Point right
-          for (int angle = straightDegrees; angle >= rightDegrees; angle--) {
-
-            servoMotor.write(angle);
-            delay(rotationDelay);
-      
-          }
-
-          delay(3000);
-          DriveStraight(leftDistance - rightDistance);
-          distanceTraveled += leftDistance;
-          
-
-          // Point left
-          for (int angle = rightDegrees; angle >= leftDegrees; angle++) {
-
-            servoMotor.write(angle);
-            delay(rotationDelay);
-      
-          }
-
-          delay(3000);
-
-          // Point straight
-          for (int angle = leftDegrees; angle >= straightDegrees; angle--) {
-
-            servoMotor.write(angle);
-            delay(rotationDelay);
-      
-          }
-          
-        }
-        
-      }
-      
-    } 
-
-    // One is zero and only need to travel to one box.
-    else if(leftDistance > 0 || rightDistance > 0){
-
-      // Go to the box on the right.
-      if (rightDistance > 0) {
-        
-        DriveStraight(rightDistance);
-        distanceTraveled += rightDistance;
-          
-        // Point at the right box.
-        for (int angle = straightDegrees; angle >= rightDegrees; angle--) {
-
-          servoMotor.write(angle);
-          delay(rotationDelay);
-      
-        }
-
-        delay(3000);
-
-        // Point straight
-        for (int angle = rightDegrees; angle <= straightDegrees; angle++) {
-
-          servoMotor.write(angle);
-          delay(rotationDelay);
-      
-        }
-        
-        
-      }
-
-      // The box is on the left.
-      else {
-
-        DriveStraight(leftDistance);
-        distanceTraveled += leftDistance;
-        
-        // Point at the left box.
-        for (int angle = straightDegrees; angle <= leftDegrees; angle++) {
-
-          servoMotor.write(angle);
-          delay(rotationDelay);
-      
-        }
-        delay(3000);
-
-        // Point straight
-        for (int angle = leftDegrees; angle >= straightDegrees; angle--) {
-
-          servoMotor.write(angle);
-          delay(rotationDelay);
-      
-        }
+        turnLeft = true;
+        DriveStraight(ROBOT_BASE_CM + 10.0);
+        RotateInPlace(90.0, true);
+        DriveStraight(ROBOT_BASE_CM + 10.0);
+        break;
         
       }
       
     }
+
+    if (!turnLeft) {
+
+      RotateInPlace(90.0, false);
+      
+    }
     
   }
-
-  // Drive the rest of the distance.
-  if (distanceTraveled < DRIVE_STRAIGHT_CM) {
-
-    DriveStraight(DRIVE_STRAIGHT_CM - distanceTraveled);
-      
-  }
-
-  // Fix the offset from the mapping function.
-  DriveStraight(SENSOR_OFFSET);
   
 }
 
@@ -679,8 +512,15 @@ void setup() {
   delay(2000);
   
   // Run the algorithm of lab.
-  FindBoxesLeftandRight();
-  StopAndLookAtBoxes();
+  CalibrateLineSensors();
+  delay(500);
+  LocateCenterOfRoom();
+  delay(500);
+  RotateToLine();
+  delay(500);
+  FollowLine();
+  delay(500);
+  MazeRunner();
 
 }
 
