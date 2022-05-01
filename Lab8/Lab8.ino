@@ -12,7 +12,7 @@
 #define SAMPLES_PER_READING 15    // The amount of samples per Usonic reading
 
 // Stats for the Servo Motor
-#define SERVO_PIN 38              
+#define SERVO_PIN 31              
 Servo servoMotor;
 
 // Stats for the Usonic
